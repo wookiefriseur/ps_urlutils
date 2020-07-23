@@ -73,6 +73,9 @@ function ConvertTo-EscapedURL {
 
 .EXAMPLE
     ConvertTo-Base64 'Moin'
+
+.EXAMPLE
+    ConvertTo-Base64 'Moin' -Encoding UTF8
 #>
 function ConvertTo-Base64 {
     [CmdletBinding()]
@@ -80,17 +83,54 @@ function ConvertTo-Base64 {
         # Text to be converted to Base64
         [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
         [System.String]
-        $Text
+        $Text,
+        # Text encoding (ASCII, UTF-8, ...)
+        [ValidateSet("ASCII", "Unicode", "UTF7", "UTF8", "UTF32")]
+        [System.String]
+        $Encoding = "UTF8"
     )
 
     begin {
         function ToBase64 {
-            return [System.Convert]::ToBase64String($Text.ToCharArray())
+            param (
+                [Parameter(Mandatory)]
+                [byte[]]
+                $bytes
+            )
+
+            return [System.Convert]::ToBase64String($bytes)
+        }
+
+        function GetBytesASCII {
+            return [System.Text.Encoding]::ASCII.GetBytes($Text)
+        }
+
+        function GetBytesUnicode {
+            return [System.Text.Encoding]::Unicode.GetBytes($Text)
+        }
+
+        function GetBytesUTF7 {
+            return [System.Text.Encoding]::UTF7.GetBytes($Text)
+        }
+
+        function GetBytesUTF8 {
+            return [System.Text.Encoding]::UTF8.GetBytes($Text)
+        }
+
+        function GetBytesUTF32 {
+            return [System.Text.Encoding]::UTF32.GetBytes($Text)
         }
     }
 
     process {
-        ToBase64
+        switch ($Encoding) {
+            { $_ -eq "ASCII" } { return ToBase64( (GetBytesASCII) ) }
+            { $_ -eq "Unicode" } { return ToBase64( (GetBytesUnicode) ) }
+            { $_ -eq "UTF7" } { return ToBase64( (GetBytesUTF7) ) }
+            { $_ -eq "UTF8" } { return ToBase64( (GetBytesUTF8) ) }
+            { $_ -eq "UTF32" } { return ToBase64( (GetBytesUTF32) ) }
+            Default { throw New-Object System.NotImplementedException }
+        }
     }
 
     end {
@@ -154,7 +194,6 @@ function ConvertFrom-Base64 {
             { $_ -eq "UTF32" } { return ByteArrayToStringUTF32 }
             Default { throw New-Object System.NotImplementedException }
         }
-
     }
 
     end {
