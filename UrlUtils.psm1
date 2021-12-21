@@ -142,10 +142,12 @@ function ConvertTo-Base64 {
     Base64 string to plain text
 
 .DESCRIPTION
-    Converts a Base64 encoded string (for instance from a data url) back to plain text.
+    Converts a Base64 encoded string (for instance from a data url) back to plain text. Tolerates missing padding.
 
 .EXAMPLE
     ConvertFrom-Base64 'TW9pbg=='
+    ConvertFrom-Base64 'TW9pbg='
+    ConvertFrom-Base64 'TW9pbg'
 
 .EXAMPLE
     ConvertFrom-Base64 'TW9pbg==' -Encoding UTF32
@@ -165,7 +167,17 @@ function ConvertFrom-Base64 {
 
     begin {
         function FromBase64ToByteArray {
-            return [System.Convert]::FromBase64String($Text)
+            $inputLen = $Text.Length
+            $currentException = ''
+            for ($i = 0; $i -lt 3; $i++) {
+                try {
+                    return [System.Convert]::FromBase64String($Text.PadRight($inputLen + $i, '='))
+                }
+                catch [System.FormatException] {
+                    $currentException = $_.Exception.Message
+                }
+            }
+            Write-Error -Message "Invalid base64 string!`n$currentException" -ErrorAction Stop
         }
 
         function ByteArrayToStringASCII {
