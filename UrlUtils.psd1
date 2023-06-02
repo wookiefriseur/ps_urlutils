@@ -26,7 +26,7 @@
 
             Tags       = @('url', 'dataurl')
             ProjectUri = 'https://github.com/wookiefriseur/ps_urlutils'
-            LicenseUri = 'https://github.com/wookiefriseur/valor-modulis/blob/master/LICENSE.md'
+            LicenseUri = 'https://github.com/wookiefriseur/valor-modulis/blob/main/LICENSE.md'
         }
 
     }
