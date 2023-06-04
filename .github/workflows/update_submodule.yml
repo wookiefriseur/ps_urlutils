@@ -1,0 +1,72 @@
+name: UpdateSubmodule
+
+# 1. updates the version in the module manifest
+# 2. creates a release with the new version number
+# 3. triggers the update action inside the main repo
+
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update_version:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Get Version Impact from commit message
+        id: get_versionchange
+        run: |
+          $commitMessage = git log --format=%B -n 1
+          switch ($commitMessage)
+          {
+              { $_ -match "#major" } { $impact = "major" }
+              { $_ -match "#minor" } { $impact = "minor" }
+              default { $impact = "patch" }
+          }
+          Write-Output "IMPACT=$impact" >> $env:GITHUB_OUTPUT
+
+      - name: Update Version
+        id: update_version
+        run: |
+          # Load Update-PSManifestVersion <MANIFEST_FILE> <IMPACT> | returns new version
+          Invoke-Expression (Invoke-RestMethod -Uri https://raw.githubusercontent.com/wookiefriseur/valor-modulis/main/.scripts/updatePSManifest.ps1)
+          $manifestFile = $(Get-ChildItem *.psd1 -Recurse | Select-Object -First 1).FullName
+          $newVersion = Update-PSManifestVersion $manifestFile $env:IMPACT
+          Write-Output "VERSION=$newVersion" >> $env:GITHUB_OUTPUT
+        env:
+          IMPACT: ${{ steps.get_versionchange.outputs.IMPACT }}
+
+      - name: Update files
+        run: |
+          git add .
+          git commit -m "bump to $env:VERSION"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.update_version.outputs.VERSION }}
+
+      - name: Create Release
+        run: |
+          gh release create "${{ steps.update_version.outputs.VERSION }}" `
+           --title "Version ${{ steps.update_version.outputs.VERSION }}" `
+           --target main `
+           --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger update in main repo
+        run: |
+          gh workflow run proxy_update_submodule_refs.yml `
+          --repo wookiefriseur/valor-modulis
+        env:
+          GITHUB_TOKEN: ${{ secrets.VM_ACTIONS }}
