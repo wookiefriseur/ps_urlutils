@@ -66,6 +66,53 @@ function ConvertTo-EscapedURL {
 
 <#
 .SYNOPSIS
+    Extract parts of a URI string.
+
+.DESCRIPTION
+    Extracts parts from a URI and makes them acessible from a table.
+    Supports http(s) URIs.
+
+.EXAMPLE
+    Get-URIParts 'https://www.example.com/?q=hello'
+    # Returns a table like @{Scheme: https ; Query: @{q: hello}, ...}
+#>
+function Get-URIParts {
+  [CmdletBinding()]
+  param (
+    [Parameter(Mandatory, Position = 1)]
+    [System.String]
+    $URI,
+    [ValidateSet("HTTP")]
+    [System.String]
+    $Scheme = "HTTP"
+  )
+
+  process {
+    $uriObject = New-Object System.Uri($URI, [System.UriKind]::Absolute)
+    $queryParts = [System.Web.HttpUtility]::ParseQueryString($uriObject.Query)
+
+    $result = @{
+      Scheme   = $uriObject.Scheme ?? ''
+      User     = $uriObject.UserInfo.Split(':')[0] ?? ''
+      Password = $uriObject.UserInfo.Split(':')[1] ?? ''
+      Host     = $uriObject.Host ?? ''
+      Port     = $uriObject.Port ?? ''
+      Path     = $uriObject.AbsolutePath ?? ''
+      Query    = @{}
+      Fragment = $uriObject.Fragment.TrimStart('#') ?? ''
+    }
+
+    foreach ($key in $queryParts.Keys) {
+      $result.Query[$key] = $queryParts[$key]
+    }
+
+    return $result
+  }
+}
+
+
+<#
+.SYNOPSIS
     Converts plain text or byte array to a Base64 string.
 
 .DESCRIPTION

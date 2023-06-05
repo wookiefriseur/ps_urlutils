@@ -46,6 +46,106 @@ Describe 'UrlUtils tests' {
     }
   }
 
+  Describe 'URI extraction and manipulation tests' {
+    Describe 'Get-URIParts' {
+      BeforeAll {
+        function Compare-URIParts {
+          param ([hashtable]$Expected, [hashtable]$Actual)
+
+          $diff = Compare-Object -ReferenceObject $Expected -DifferenceObject $Actual -Property scheme, user, password, host, port, path, fragment
+          $queryDiff = Compare-Object -ReferenceObject $Expected.query -DifferenceObject $Actual.query
+
+          $diffMsg = if ($diff -or $queryDiff) {
+            "Differences:`n" + ($diff + $queryDiff | Out-String)
+          }
+          else {
+            "No differences"
+          }
+
+          ($diff + $queryDiff) | Should -BeNullOrEmpty -Because $diffMsg
+        }
+      }
+
+      It 'should return correct parts for a given URI containing credentials and IPv6' {
+        $uri = 'https://user:password@[::1]:8080/index.php?q1=a&q2=123#anchor'
+        $expected = @{
+          Scheme   = 'https'
+          User     = 'user'
+          Password = 'password'
+          Host     = '[::1]'
+          Port     = 8080
+          Path     = '/index.php'
+          Query    = @{
+            q1 = 'a'
+            q2 = '123'
+          }
+          Fragment = 'anchor'
+        }
+
+        $actual = Get-WIPURIParts -URI $uri
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should return correct parts for a regular web URI' {
+        $uri = 'http://www.example.com'
+        $expected = @{
+          Scheme   = 'http'
+          User     = ''
+          Password = ''
+          Host     = 'www.example.com'
+          Port     = 80
+          Path     = '/'
+          Query    = @{}
+          Fragment = ''
+        }
+
+        $actual = Get-WIPURIParts -URI $uri
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should return correct parts for a URI containing an emoji' {
+        $uri = 'https://🍕.ws'
+        $expected = @{
+          Scheme   = 'https'
+          User     = ''
+          Password = ''
+          Host     = '🍕.ws'
+          Port     = 443
+          Path     = '/'
+          Query    = @{}
+          Fragment = ''
+        }
+
+        $actual = Get-WIPURIParts -URI $uri
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should return correct parts for a URI pointing to an IPv4' {
+        $uri = 'http://127.0.0.1'
+        $expected = @{
+          Scheme   = 'http'
+          User     = ''
+          Password = ''
+          Host     = '127.0.0.1'
+          Port     = 80
+          Path     = '/'
+          Query    = @{}
+          Fragment = ''
+        }
+
+        $actual = Get-WIPURIParts -URI $uri
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should throw an error for an invalid URI' {
+        $uri = 'not a valid URI'
+        { Get-WIPURIParts -URI $uri } | Should -Throw
+      }
+
+    }
+
+  }
+
   Describe 'Base64 conversion tests' {
     Context 'Simple string check' {
       It 'should return the same string after conversion to Base64 and back' {
