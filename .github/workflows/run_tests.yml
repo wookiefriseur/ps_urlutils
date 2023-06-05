@@ -1,0 +1,29 @@
+name: RunTests
+
+permissions:
+  contents: write
+on:
+  pull_request:
+    branches: [main]
+    # ToDo-maybe: add completed review as precondition, instead of reacting to all PRs
+    types: [opened]
+
+jobs:
+  run_tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Run Tests
+        id: testresults
+        run: |
+          Set-PSRepository psgallery -InstallationPolicy trusted
+          Install-Module -Name Pester -Confirm:$false -Force
+          Invoke-Pester

@@ -1,4 +1,4 @@
-name: UpdateSubmodule
+name: ReleaseSubmodule
 
 # 1. updates the version in the module manifest
 # 2. creates a release with the new version number
@@ -7,13 +7,16 @@ name: UpdateSubmodule
 permissions:
   contents: write
 on:
-  push:
+  pull_request:
     branches: [main]
+    types: [closed]
 
 jobs:
-  update_version:
-    runs-on: windows-latest
+  update_and_release:
+    # Skip if the merged PR was not a release PR (no version increase)
+    if: (github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'version:'))
 
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -26,14 +29,16 @@ jobs:
       - name: Get Version Impact from commit message
         id: get_versionchange
         run: |
-          $commitMessage = git log --format=%B -n 1
-          switch ($commitMessage)
+          $labels = "${{ join(github.event.pull_request.labels.*.name,  ', ') }}"
+          switch ($labels)
           {
-              { $_ -match "#major" } { $impact = "major" }
-              { $_ -match "#minor" } { $impact = "minor" }
-              default { $impact = "patch" }
+            { $_ -match "version:MAJOR" } { $impact = "major" }
+            { $_ -match "version:MINOR" } { $impact = "minor" }
+            default { $impact = "patch" }
           }
           Write-Output "IMPACT=$impact" >> $env:GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Version
         id: update_version
