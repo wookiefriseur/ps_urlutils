@@ -9,26 +9,26 @@
     ConvertFrom-EscapedURL "https%3a%2f%2fwww.example.com%3fq%3dhello"
 #>
 function ConvertFrom-EscapedURL {
-    [CmdletBinding()]
-    param (
-        # Escaped text to be converted
-        [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
-        [System.String]
-        $Text
-    )
+  [CmdletBinding()]
+  param (
+    # Escaped text to be converted
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
+    [System.String]
+    $Text
+  )
 
-    begin {
-        function UnescapeURL {
-            return [System.Web.HttpUtility]::UrlDecode($Text)
-        }
+  begin {
+    function UnescapeURL {
+      return [System.Web.HttpUtility]::UrlDecode($Text)
     }
+  }
 
-    process {
-        UnescapeURL
-    }
+  process {
+    UnescapeURL
+  }
 
-    end {
-    }
+  end {
+  }
 }
 
 <#
@@ -42,172 +42,168 @@ function ConvertFrom-EscapedURL {
     ConvertTo-EscapedURL 'https://www.example.com/?q=hello'
 #>
 function ConvertTo-EscapedURL {
-    [CmdletBinding()]
-    param (
-        # Text to be escaped
-        [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
-        [System.String]
-        $Text
-    )
+  [CmdletBinding()]
+  param (
+    # Text to be escaped
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
+    [System.String]
+    $Text
+  )
 
-    begin {
-        function EscapeURL {
-            return [System.Web.HttpUtility]::UrlEncodeUnicode($Text)
-        }
+  begin {
+    function EscapeURL {
+      return [System.Web.HttpUtility]::UrlEncodeUnicode($Text)
     }
+  }
 
-    process {
-        EscapeURL
-    }
+  process {
+    EscapeURL
+  }
 
-    end {
-    }
+  end {
+  }
 }
 
 <#
 .SYNOPSIS
-    Plain text to Base64 string
+    Converts plain text or byte array to a Base64 string.
 
 .DESCRIPTION
-    Converts plain text to a Base64 encoded string that can be used in data urls.
+    This commandlet converts plain text or a byte array to a Base64 encoded string.
+    The resulting Base64 string can be used in data URLs or emails.
 
 .EXAMPLE
     ConvertTo-Base64 'Moin'
+    # Returns 'TW9pbg=='
 
 .EXAMPLE
-    ConvertTo-Base64 'Moin' -Encoding UTF8
+    ConvertTo-Base64 -Text 'Moin' -Encoding UTF32
+    # Returns 'TQAAAG8AAABpAAAAbgAAAA=='
+
+.EXAMPLE
+    Get-Content -Raw some.zip -AsByteStream | ConvertTo-Base64 -ByteArray | Set-Content -Path some.zip.txt -NoNewline
+    # Reads a zip file as a byte array, converts it to Base64, and saves the Base64 string to a text file
 #>
 function ConvertTo-Base64 {
-    [CmdletBinding()]
-    param (
-        # Text to be converted to Base64
-        [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
-        [System.String]
-        $Text,
-        # Text encoding (ASCII, UTF-8, ...)
-        [ValidateSet("ASCII", "Unicode", "UTF7", "UTF8", "UTF32")]
-        [System.String]
-        $Encoding = "UTF8"
-    )
+  [CmdletBinding()]
+  param (
+    # Text to be converted to Base64
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true, ParameterSetName = 'Text')]
+    [System.String]
+    $Text,
+    # ByteArray to be converted to Base64
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true, ParameterSetName = 'ByteArray')]
+    [System.Byte[]]
+    $ByteArray,
+    # Encoding for byte conversion
+    [ValidateSet("ASCII", "UTF-16", "UTF-7", "UTF-8", "UTF-32", "ISO-8859-1", "WINDOWS-1252")]
+    [System.String]
+    $Encoding = "UTF-8"
+  )
 
-    begin {
-        function ToBase64 {
-            param (
-                [Parameter(Mandatory)]
-                [byte[]]
-                $bytes
-            )
-
-            return [System.Convert]::ToBase64String($bytes)
-        }
-
-        function GetBytesASCII {
-            return [System.Text.Encoding]::ASCII.GetBytes($Text)
-        }
-
-        function GetBytesUnicode {
-            return [System.Text.Encoding]::Unicode.GetBytes($Text)
-        }
-
-        function GetBytesUTF7 {
-            return [System.Text.Encoding]::UTF7.GetBytes($Text)
-        }
-
-        function GetBytesUTF8 {
-            return [System.Text.Encoding]::UTF8.GetBytes($Text)
-        }
-
-        function GetBytesUTF32 {
-            return [System.Text.Encoding]::UTF32.GetBytes($Text)
-        }
+  begin {
+    function textToByteArray {
+      param ([string] $String, [string] $Encoding)
+      $bytes = [System.Text.Encoding]::GetEncoding($Encoding).GetBytes($String)
+      return $bytes
     }
 
-    process {
-        switch ($Encoding) {
-            { $_ -eq "ASCII" } { return ToBase64( (GetBytesASCII) ) }
-            { $_ -eq "Unicode" } { return ToBase64( (GetBytesUnicode) ) }
-            { $_ -eq "UTF7" } { return ToBase64( (GetBytesUTF7) ) }
-            { $_ -eq "UTF8" } { return ToBase64( (GetBytesUTF8) ) }
-            { $_ -eq "UTF32" } { return ToBase64( (GetBytesUTF32) ) }
-            Default { throw New-Object System.NotImplementedException }
-        }
-    }
+    function byteArrayToBase64String {
+      param ([Parameter(Mandatory)][byte[]] $bytes)
 
-    end {
+      return [System.Convert]::ToBase64String($bytes)
     }
+  }
+
+  process {
+    if ($PSCmdlet.ParameterSetName -eq 'ByteArray') {
+      $bytes = $ByteArray
+    }
+    else {
+      $bytes = textToByteArray -String $Text -Encoding $Encoding
+    }
+    return byteArrayToBase64String $bytes
+  }
+
+  end {}
 }
 
 <#
 .SYNOPSIS
-    Base64 string to plain text
+    Converts a Base64 string to plain text or a byte array.
 
 .DESCRIPTION
-    Converts a Base64 encoded string (for instance from a data url) back to plain text. Tolerates missing padding.
+    This commandlet converts a Base64 encoded string back to plain text or a byte array.
+    Specify an encoding if the original was not utf-8.
+    It also tolerates missing padding in the Base64 string.
 
 .EXAMPLE
     ConvertFrom-Base64 'TW9pbg=='
     ConvertFrom-Base64 'TW9pbg='
     ConvertFrom-Base64 'TW9pbg'
+    # Returns 'Moin', missing padding is OK
 
 .EXAMPLE
-    ConvertFrom-Base64 'TW9pbg==' -Encoding UTF32
+    ConvertFrom-Base64 'TQAAAG8AAABpAAAAbgAAAA==' -Encoding UTF-32
+    # Returns 'Moin', with explicit utf-32 encoding
+
+.EXAMPLE
+    Get-Content -Raw -AsByteStream b64.txt | ConvertFrom-Base64 -ByteArray -AsByteArray | Set-Content -Path file.zip -AsByteStream
+    # Reads a Base64 string from a text file, converts it to a byte array, and saves the byte array to a binary file
 #>
 function ConvertFrom-Base64 {
-    [CmdletBinding()]
-    param (
-        # Text to be converted to plain text
-        [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true)]
-        [System.String]
-        $Text,
-        # Text encoding (ASCII, UTF-8, ...)
-        [ValidateSet("ASCII", "Unicode", "UTF7", "UTF8", "UTF32")]
-        [System.String]
-        $Encoding = "UTF8"
-    )
+  [CmdletBinding()]
+  param (
+    # Input as text
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true, ParameterSetName = 'Text')]
+    [System.String]
+    $Text,
+    # Input as a ByteArray
+    [Parameter(Mandatory, Position = 1, ValueFromPipeline = $true, ParameterSetName = 'ByteArray')]
+    [System.Byte[]]
+    $ByteArray,
+    [ValidateSet("ASCII", "ISO-8859-1", "UTF-7", "UTF-8", "UTF-16", "UTF-32", "WINDOWS-1252")]
+    [System.String]
+    $Encoding = "UTF-8",
+    # Output as a ByteArray
+    [Parameter()]
+    [Switch]
+    $AsByteArray = $false
+  )
 
-    begin {
-        function FromBase64ToByteArray {
-            $inputLen = $Text.Length
-            $currentException = ''
-            for ($i = 0; $i -lt 3; $i++) {
-                try {
-                    return [System.Convert]::FromBase64String($Text.PadRight($inputLen + $i, '='))
-                }
-                catch [System.FormatException] {
-                    $currentException = $_.Exception.Message
-                }
-            }
-            Write-Error -Message "Invalid base64 string!`n$currentException" -ErrorAction Stop
-        }
+  begin {
+    function fromBase64ToByteArray {
+      param ([System.String] $Base64String)
 
-        function ByteArrayToStringASCII {
-            return [System.Text.Encoding]::ASCII.GetString( (FromBase64ToByteArray) )
+      $inputLen = $Base64String.Length
+      $currentException = ''
+      for ($i = 0; $i -lt 3; $i++) {
+        try {
+          return [System.Convert]::FromBase64String($Base64String.PadRight($inputLen + $i, '='))
         }
-        function ByteArrayToStringUnicode {
-            return [System.Text.Encoding]::Unicode.GetString( (FromBase64ToByteArray) )
+        catch [System.FormatException] {
+          $currentException = $_.Exception.Message
         }
-        function ByteArrayToStringUTF7 {
-            return [System.Text.Encoding]::UTF7.GetString( (FromBase64ToByteArray) )
-        }
-        function ByteArrayToStringUTF8 {
-            return [System.Text.Encoding]::UTF8.GetString( (FromBase64ToByteArray) )
-        }
-        function ByteArrayToStringUTF32 {
-            return [System.Text.Encoding]::UTF32.GetString( (FromBase64ToByteArray) )
-        }
+      }
+      Write-Error -Message "Invalid base64 string!`n$currentException" -ErrorAction Stop
     }
 
-    process {
-        switch ($Encoding) {
-            { $_ -eq "ASCII" } { return ByteArrayToStringASCII }
-            { $_ -eq "Unicode" } { return ByteArrayToStringUnicode }
-            { $_ -eq "UTF7" } { return ByteArrayToStringUTF7 }
-            { $_ -eq "UTF8" } { return ByteArrayToStringUTF8 }
-            { $_ -eq "UTF32" } { return ByteArrayToStringUTF32 }
-            Default { throw New-Object System.NotImplementedException }
-        }
+    if ($PSCmdlet.ParameterSetName -eq 'ByteArray') {
+      $Text = ([System.Text.Encoding]::GetEncoding($Encoding)).GetString($ByteArray)
     }
 
-    end {
+    $bytes = fromBase64ToByteArray -Base64String $Text
+  }
+
+  process {
+    if ($AsByteArray) {
+      return $bytes
     }
+    else {
+      return ([System.Text.Encoding]::GetEncoding($Encoding)).GetString($bytes)
+    }
+  }
+
+  end {}
+
 }
