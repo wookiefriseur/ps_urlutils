@@ -2,6 +2,7 @@ name: RunTests
 
 permissions:
   contents: write
+  pull-requests: write
 on:
   pull_request_target:
     branches: [main]
@@ -16,6 +17,9 @@ jobs:
         uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@users.noreply.github.com"
 
       - name: Run Tests
         id: testresults
@@ -23,3 +27,15 @@ jobs:
           Set-PSRepository psgallery -InstallationPolicy trusted
           Install-Module -Name Pester -Confirm:$false -Force
           Invoke-Pester
+
+      - name: Set default label
+        run: |
+          if(-not $HAS_VERSION_LABEL) {
+            Write-Output "🏷️ Setting default version label"
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "version:MINOR"
+          } else {
+            Write-Output "🏷️ Version label already exists"
+          }
+        env:
+          HAS_VERSION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'version:') }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
