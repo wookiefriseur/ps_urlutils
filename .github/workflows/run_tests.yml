@@ -3,10 +3,9 @@ name: RunTests
 permissions:
   contents: write
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
-    # ToDo-maybe: add completed review as precondition, instead of reacting to all PRs
-    types: [opened]
+    types: [opened, synchronize]
 
 jobs:
   run_tests:
@@ -15,9 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@users.noreply.github.com"
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Run Tests
         id: testresults
