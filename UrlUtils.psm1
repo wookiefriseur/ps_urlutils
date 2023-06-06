@@ -87,26 +87,70 @@ function Get-URIParts {
     $Scheme = "HTTP"
   )
 
+  begin {
+    $schemeHttp = "^(?i)https?://"
+    $schemePort443 = ":443(?![a-zA-Z@])(/.+)*"
+    $schemeRFC3986 = "[a-z][a-z\.\-\+]*"
+  }
+
   process {
-    $uriObject = New-Object System.Uri($URI, [System.UriKind]::Absolute)
-    $queryParts = [System.Web.HttpUtility]::ParseQueryString($uriObject.Query)
+    switch ($Scheme) {
+      { $_ -eq "HTTP" } {
+        if (-not($URI -match $schemeHttp)) {
+          # Check if prepending schema fixes it
+          $prefix = if ($URI -match $schemePort443 ) { 'https://' }
+          else { 'http://' }
+          $prefixed = "$($prefix)$($URI)"
+          $tmpObject = $null
+          $isValid = [Uri]::IsWellFormedUriString($prefixed, [UriKind]::Absolute)
+          $isValid = $isValid -and ([Uri]::TryCreate($prefixed, [UriKind]::Absolute, [ref]$tmpObject))
+          $isValid = $isValid -and ($tmpObject.Scheme -match "https?")
 
-    $result = @{
-      Scheme   = $uriObject.Scheme ?? ''
-      User     = $uriObject.UserInfo.Split(':')[0] ?? ''
-      Password = $uriObject.UserInfo.Split(':')[1] ?? ''
-      Host     = $uriObject.Host ?? ''
-      Port     = $uriObject.Port ?? ''
-      Path     = $uriObject.AbsolutePath ?? ''
-      Query    = @{}
-      Fragment = $uriObject.Fragment.TrimStart('#') ?? ''
+          if (-not($isValid)) { throw  "Invalid Scheme in URI: $URI" }
+
+          $URI = $prefixed
+        }
+
+        $uriObject = New-Object System.Uri($URI, [System.UriKind]::Absolute)
+
+        # Catch malformed schemes
+        if (-not($uriObject.Scheme -match $schemeRFC3986)) {
+          throw "Invalid scheme: $($uriObject.Scheme)"
+        }
+
+        # Catch malformed paths
+        if ($uriObject.AbsolutePath.StartsWith('//')) {
+          throw "Invalid path segment: $($uriObject.AbsolutePath)"
+        }
+
+        $queryParts = [System.Web.HttpUtility]::ParseQueryString($uriObject.Query)
+
+        $result = @{
+          Scheme   = $uriObject.Scheme ?? ''
+          User     = $uriObject.UserInfo.Split(':')[0] ?? ''
+          Password = $uriObject.UserInfo.Split(':')[1] ?? ''
+          Host     = $uriObject.Host ?? ''
+          Port     = $uriObject.Port ?? ''
+          Path     = $uriObject.AbsolutePath ?? ''
+          Query    = @{}
+          Fragment = $uriObject.Fragment.TrimStart('#') ?? ''
+        }
+
+        if ($result.Port -lt 0 -or $result.Port -gt (65536)) {
+          throw "Invalid port or malformed URI"
+        }
+        if (-not($URI -match $schemeHttp)) { throw "Unsupported Scheme" }
+
+        foreach ($key in $queryParts.Keys) {
+          $result.Query[$key] = $queryParts[$key]
+        }
+        return $result
+
+      }
+      Default { throw "Unsupported Scheme: $($Scheme)" }
     }
+    throw "Unsupported scheme ..."
 
-    foreach ($key in $queryParts.Keys) {
-      $result.Query[$key] = $queryParts[$key]
-    }
-
-    return $result
   }
 }
 
