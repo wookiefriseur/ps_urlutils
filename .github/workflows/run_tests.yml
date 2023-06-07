@@ -30,12 +30,27 @@ jobs:
 
       - name: Set default label
         run: |
-          if(-not $HAS_VERSION_LABEL) {
+          $prLabelsJson = gh pr view ${{ github.event.pull_request.number }} --json labels
+          $prLabels = $prLabelsJson | ConvertFrom-Json
+
+          $VERSION_LABELS = @('version:MAJOR', 'version:MINOR', 'version:PATCH')
+          $existingVersionLabels = $prLabels.labels | Where-Object { $VERSION_LABELS -contains $_.name }
+
+          if ($existingVersionLabels.Count -eq 0) {
             Write-Output "🏷️ Setting default version label"
             gh pr edit ${{ github.event.pull_request.number }} --add-label "version:MINOR"
           } else {
-            Write-Output "🏷️ Version label already exists"
+            Write-Output "🏷️ labels already exist, removing mutually exclusive ones"
+
+            switch ($existingVersionLabels.name) {
+              'version:MAJOR' {
+                gh pr edit ${{ github.event.pull_request.number }} --remove-label "version:MINOR" --remove-label "version:PATCH"
+                break
+              }
+              'version:MINOR' {
+                gh pr edit ${{ github.event.pull_request.number }} --remove-label "version:PATCH"
+              }
+            }
           }
         env:
-          HAS_VERSION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'version:') }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
