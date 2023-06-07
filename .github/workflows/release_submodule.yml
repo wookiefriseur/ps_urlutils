@@ -14,7 +14,7 @@ on:
 jobs:
   update_and_release:
     # Skip if the merged PR was not a release PR (no version increase)
-    if: (github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'version:'))
+    if: github.event.pull_request.merged && (contains(github.event.pull_request.labels.*.name, 'version:MAJOR') || contains(github.event.pull_request.labels.*.name, 'version:MINOR') || contains(github.event.pull_request.labels.*.name, 'version:PATCH') )
 
     runs-on: windows-latest
     steps:
