@@ -1,0 +1,6 @@
+overrides:
+  - files: "*.yml"
+    options:
+      editorconfig: true
+      singleQuote: false
+      printWidth: 80

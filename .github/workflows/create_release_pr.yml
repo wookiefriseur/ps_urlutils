@@ -1,0 +1,148 @@
+name: CreateReleasePR
+
+# Connected workflows are:
+# 1. RunTests - run_tests.yml
+# 2. 📍CreateReleasePR - create_release_pr.yml
+# 3. MergeAndRelease - merge_and_release.yml
+
+# fixes version labels
+# updates the version in the module manifest
+# creates a release PR with the new version number
+# triggers RunTests to run
+
+permissions:
+  contents: write
+  pull-requests: write
+on:
+  # When triggered manually: Gets data from most recently merged PR
+  workflow_dispatch:
+  # When triggered by merge: Gets data from the PR that triggered the event
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  update_and_pr:
+    # run if the merged PR was not already processed by MergeAndRelease workflow (release branches)
+    # run if the merged PR is marked as a release ('actions:RELEASE')
+    # run if the workflow was started manually
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged && !startsWith(github.event.pull_request.head.ref, 'release/') && (contains(github.event.pull_request.labels.*.name, 'actions:RELEASE')))
+
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Get PR details
+        id: get_pr_details
+        run: |
+          if('${{ github.event_name }}' -ne 'workflow_dispatch') {
+            $labels = "${{ join(github.event.pull_request.labels.*.name,  ', ') }}"
+          } else {
+            $latestPRs = gh pr list --base main --state merged --json number,labels,mergedAt --limit 10 | ConvertFrom-JSON
+
+            $VERSION_LABELS = @('version:MAJOR', 'version:MINOR', 'version:PATCH')
+            $latestReleasePR = $latestPRs | Where-Object {
+              $VERSION_LABELS.Contains($_.labels.name)
+            } | Sort-Object -Property mergedAt -Descending | Select-Object -First 1
+            $labels = $latestReleasePR.labels.name -join ', '
+          }
+          Write-Output "LABELS=$labels" >> $env:GITHUB_OUTPUT
+          Write-Output "PR_NUMBER=$($latestReleasePR.number)" >> $env:GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix version labels and get Version Impact
+        id: get_versionchange
+        run: |
+          # Labels can come in like: "version:MAJOR, version:MINOR, somelabel"
+          switch ('${{ steps.get_pr_details.outputs.LABELS }}')
+          {
+            { $_ -match "version:MAJOR" } {
+              Write-Output "🏷️ label MAJOR detected"
+              gh pr edit ${{ github.event.pull_request.number }} --remove-label "version:MINOR" --remove-label "version:PATCH"
+              $impact = "major"
+              break
+            }
+            { $_ -match "version:MINOR" } {
+              Write-Output "🏷️ label MINOR detected"
+              gh pr edit ${{ github.event.pull_request.number }} --remove-label "version:PATCH"
+              $impact = "minor"
+              break
+            }
+            { $_ -match "version:PATCH" } {
+              Write-Output "🏷️ label PATCH detected"
+              $impact = "patch"
+              break
+            }
+            default {
+              Write-Output "🏷️ No version label detected, setting default"
+              gh pr edit ${{ github.event.pull_request.number }} --add-label "version:MINOR"
+              $impact = "minor"
+              }
+          }
+          Write-Output "IMPACT=$impact" >> $env:GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Creates temporary release branch, will be deleted in another workflow
+      - name: Create Release Branch
+        id: release_branch
+        run: |
+          $BRANCH = "release/pr-${{ steps.get_pr_details.outputs.PR_NUMBER }}"
+          git branch -d "$BRANCH" || true
+          git push origin --delete "$BRANCH" || true
+          git branch "$BRANCH"
+          git checkout "$BRANCH"
+          git push --set-upstream origin "$BRANCH"
+          Write-Host "BRANCH_NAME=$BRANCH" >> $env:GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Version
+        id: update_version
+        run: |
+          # Load Update-PSManifestVersion <MANIFEST_FILE> <IMPACT> | returns new version
+          Invoke-Expression (Invoke-RestMethod -Uri https://raw.githubusercontent.com/wookiefriseur/valor-modulis/main/.scripts/updatePSManifest.ps1)
+          $manifestFile = $(Get-ChildItem *.psd1 -Recurse | Select-Object -First 1).FullName
+          $newVersion = Update-PSManifestVersion $manifestFile ${{ steps.get_versionchange.outputs.IMPACT }}
+          Write-Output "VERSION=$newVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Update files
+        id: update_files
+        run: |
+          git add .
+          git commit -m "update to ${{ steps.update_version.outputs.VERSION }}"
+          git push
+          Write-Output "SHA=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release PR
+        run: |
+          gh pr create `
+           --title "Release ${{ steps.update_version.outputs.VERSION }}" `
+           --fill `
+           --base main `
+           --label `actions:RELEASE`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    outputs:
+      version: ${{ steps.update_version.outputs.VERSION }}
+      branch: ${{ steps.release_branch.outputs.BRANCH_NAME }}
+      sha: ${{ steps.update_files.outputs.SHA }}
+
+  # Run test workflow against the new release PR
+  trigger_tests:
+    needs: [update_and_pr]
+    uses: ./.github/workflows/run_tests.yml
+    with:
+      sha: ${{ needs.update_and_pr.outputs.sha }}
+      branch: ${{ needs.update_and_pr.outputs.branch }}
+      version: ${{ needs.update_and_pr.outputs.version }}
