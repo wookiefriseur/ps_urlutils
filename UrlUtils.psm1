@@ -70,11 +70,15 @@ function ConvertTo-EscapedURL {
 
 .DESCRIPTION
     Extracts parts from a URI and makes them acessible from a table.
-    Supports http(s) URIs.
+    Supports http(s) and data URIs.
 
 .EXAMPLE
-    Get-URIParts 'https://www.example.com/?q=hello'
-    # Returns a table like @{Scheme: https ; Query: @{q: hello}, ...}
+    Get-URIParts 'https://www.example.com/?q=moin'
+    # Returns a table like @{Scheme: https ; Query: @{q: moin}, ...}
+
+.EXAMPLE
+    Get-URIParts -Scheme DATA -URI "data:application/json;charset=US-ASCII,{"moin":true}"
+    # Returns a table like @{Scheme: data ; Data: {"moin":true}, MimeType: application/json, ...}
 #>
 function Get-URIParts {
   [CmdletBinding()]
@@ -82,13 +86,24 @@ function Get-URIParts {
     [Parameter(Mandatory, Position = 1)]
     [System.String]
     $URI,
-    [ValidateSet("HTTP")]
+    [ValidateSet("HTTP", "DATA")]
     [System.String]
     $Scheme = "HTTP"
   )
 
   begin {
     $schemeHttp = "^(?i)https?://"
+
+    # rfc2397: data:[<mediatype>][";base64"],data
+    # mediatype := [ type "/" subtype ] *( ";" parameter )
+    # parameter  := attribute "=" value
+    $schemeDataRFC2397 = @"
+^(?i)data:
+(?:(?<type>[a-z]+/[a-z0-9\-]+)?
+(?<params>(?:;[a-z0-9\-]+=[a-z0-9\-]+)*)?
+(?<base64>;base64)?),
+"@ -split "`n" -join ""
+
     $schemePort443 = ":443(?![a-zA-Z@])(/.+)*"
     $schemeRFC3986 = "[a-z][a-z\.\-\+]*"
   }
@@ -146,6 +161,39 @@ function Get-URIParts {
         }
         return $result
 
+      }
+      { $_ -eq "DATA" } {
+        if (-not($URI -match $schemeDataRFC2397)) {
+          # Let's catch cases standalone params (implicit mimetype)
+          $fixedURI = $URI -replace '^data:', 'data:text/plain;'
+          if (-not($fixedURI -match $schemeDataRFC2397)) {
+            # Fix didn't help, cannot be salvaged, aborting
+            throw "Invalid data scheme in: $URI"
+          }
+          $URI = $fixedURI
+        }
+
+        $params = @{}
+        $paramArray = $Matches['params'] -split ';' | Where-Object { $_ }
+        foreach ($param in $paramArray) {
+          $keyValue = "$param".Split('=')
+          $params[$keyValue[0]] = $keyValue[1]
+        }
+
+        # Set fallback charset if none is set
+        if (-not($params.ContainsKey('charset'))) {
+          $params['charset'] = "US-ASCII"
+        }
+
+        $result = @{
+          Scheme     = 'data'
+          MimeType   = $Matches['type'] ?? 'text/plain'
+          Parameters = $params
+          Base64     = $null -ne $Matches['base64']
+          Data       = $URI.Substring($Matches[0].Length) ?? ''
+        }
+
+        return $result
       }
       Default { throw "Unsupported Scheme: $($Scheme)" }
     }

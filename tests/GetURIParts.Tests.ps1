@@ -1,74 +1,42 @@
-# Check if Pester is available (if run as a script, otherwise use Invoke-Pester)
-if (-not(Get-Module -ListAvailable -Name Pester)) {
-  # If not, try to install it
-  Write-Output "Pester module not found. Attempting to install..."
-  try {
-    Install-Module -Name Pester -Force
-  }
-  catch {
-    Write-Error "Failed to install Pester. Please install it manually."
-    return
-  }
-}
+# Tests for Get-URIParts
 
-Describe 'UrlUtils tests' {
+Describe 'URI extraction and manipulation tests' {
   BeforeAll {
     # Import WIP modules to be tested
-    foreach ($module in $(Get-ChildItem -Path $PSScriptRoot -Filter *.psm1)) {
+    foreach ($module in $(Get-ChildItem -Path (Join-Path $PSScriptRoot "..") -Filter *.psm1)) {
       Write-Output "Importing $module"
       Import-Module -Name $module.FullName -Prefix 'WIP' -Force
     }
-  }
 
-  Describe "URL Escaping Tests" {
-    It "Converts plain text to escaped URL" {
-      $plainText = 'https://www.example.com/?q=hello world'
-      $escapedText = ConvertTo-WIPEscapedURL $plainText
-      $escapedText | Should -Be 'https%3a%2f%2fwww.example.com%2f%3fq%3dhello+world'
-    }
+    # Helper function for hashtable comparison
+    function Compare-URIParts {
+      param ([hashtable]$Expected, [hashtable]$Actual, [string]$ContextMessage = '')
 
-    It "Converts escaped URL to plain text" {
-      $escapedText = 'https%3a%2f%2fwww.example.com%2f%3fq%3dhello+world'
-      $plainText = ConvertFrom-WIPEscapedURL $escapedText
-      $plainText | Should -Be 'https://www.example.com/?q=hello world'
-    }
+      foreach ($key in $Expected.Keys) {
+        $expectedValue = $Expected[$key]
+        $actualValue = $Actual[$key]
 
-    It "Converts irregular escaped URL to plain text (%20 instead of + in query)" {
-      $escapedText = 'https%3a%2f%2fwww.example.com%2f%3fq%3dhello%20world'
-      $plainText = ConvertFrom-WIPEscapedURL $escapedText
-      $plainText | Should -Be 'https://www.example.com/?q=hello world'
-    }
+        if ($null -eq $actualValue) {
+          $actualValue | Should -Be $expectedValue -Because "$ContextMessage`n$($key): expected '$expectedValue', got '$actualValue'"
+        }
 
-    It "Preserves original URL when converting to and from escaped URL" {
-      $originalUrl = 'https://www.example.com/?q=hello world'
-      $escapedAndUnescapedUrl = $originalUrl | ConvertTo-WIPEscapedURL | ConvertFrom-WIPEscapedURL
-      $escapedAndUnescapedUrl | Should -Be $originalUrl
-    }
-  }
-
-  Describe 'URI extraction and manipulation tests' {
-    Describe 'Get-URIParts' {
-      BeforeAll {
-        function Compare-URIParts {
-          param ([hashtable]$Expected, [hashtable]$Actual, [string]$ContextMessage = '')
-
-          foreach ($key in $Expected.Keys) {
-            if ($key -eq 'query') {
-              $queryDiff = Compare-Object -ReferenceObject $Expected.query -DifferenceObject $Actual.query
-              if ($queryDiff) {
-                $diffMsg = "Differences in query:`n" + ($queryDiff | Out-String)
-                $queryDiff | Should -BeNullOrEmpty -Because "$ContextMessage`n$diffMsg"
-              }
-            }
-            else {
-              $actualValue = $Actual[$key]
-              $expectedValue = $Expected[$key]
-              $actualValue | Should -Be $expectedValue -Because "$ContextMessage`n$($key): expected '$expectedValue', got '$actualValue'"
-            }
+        if (($expectedValue -is [hashtable]) -or ($expectedValue -is [array])) {
+          $diff = Compare-Object -ReferenceObject $expectedValue -DifferenceObject $actualValue
+          if ($diff) {
+            $diffMsg = "Differences in $($key):`n" + ($diff | Out-String)
+            $diff | Should -BeNullOrEmpty -Because "$ContextMessage`n$diffMsg"
           }
         }
+        else {
+          $actualValue | Should -Be $expectedValue -Because "$ContextMessage`n$($key): expected '$expectedValue', got '$actualValue'"
+        }
       }
+    }
+  }
 
+  Describe 'HTTP URI scheme tests' {
+
+    Context 'Single tests for HTTP URIs' {
       It 'should return correct parts for a given URI containing credentials and IPv6' {
         $uri = 'https://user:password@[::1]:8080/index.php?q1=a&q2=123#anchor'
         $expected = @{
@@ -191,6 +159,19 @@ Describe 'UrlUtils tests' {
         Compare-URIParts -Expected $expected -Actual $actual
       }
 
+      It 'should throw an error for an invalid URI' {
+        $uri = 'not a valid URI'
+        { Get-WIPURIParts -URI $uri } | Should -Throw -Because "🔥 URI was: $uri"
+      }
+
+      It 'should throw an error for a URI with an unsupported scheme' {
+        $uri = 'unsupported://www.example.com'
+        { Get-WIPURIParts -URI $uri } | Should -Throw -Because "🔥 URI was: $uri"
+      }
+
+    }
+
+    Context 'Test lists of HTTP URIs' {
       It 'should correctly parse all kinds of valid HTTP URIs' {
         $validUris = @(
           @{ Uri     = 'https://user:password@[::1]:8080/index.php?q1=a&q2=123#anchor'
@@ -241,16 +222,6 @@ Describe 'UrlUtils tests' {
         }
       }
 
-      It 'should throw an error for an invalid URI' {
-        $uri = 'not a valid URI'
-        { Get-WIPURIParts -URI $uri } | Should -Throw -Because "🔥 URI was: $uri"
-      }
-
-      It 'should throw an error for a URI with an unsupported scheme' {
-        $uri = 'unsupported://www.example.com'
-        { Get-WIPURIParts -URI $uri } | Should -Throw -Because "🔥 URI was: $uri"
-      }
-
       It 'should throw an error for a correctly prefixed invalid URI' {
         $invalidUris = @(
           'http://',
@@ -275,68 +246,95 @@ Describe 'UrlUtils tests' {
           { Get-WIPURIParts -URI $uri } | Should -Throw -Because "🔥 URI was: $uri"
         }
       }
-
     }
-
   }
 
-  Describe 'Base64 conversion tests' {
-    Context 'Simple string check' {
-      It 'should return the same string after conversion to Base64 and back' {
-        $originalString = 'Test String'
-        $base64String = ConvertTo-WIPBase64 $originalString -Encoding UTF-8
-        $convertedString = ConvertFrom-WIPBase64 $base64String -Encoding UTF-8
-        $convertedString | Should -Be $originalString
+  Describe 'DATA URI scheme tests' {
+
+    Context 'Single tests for DATA URIs' {
+      It 'should return correct parts for a valid data URI' {
+        $uri = 'data:application/json;charset=UTF-8,{"message": "moin"}'
+        $expected = @{
+          Scheme     = 'data'
+          MimeType   = 'application/json'
+          Parameters = @{ charset = 'UTF-8' }
+          Base64     = $false
+          Data       = '{"message": "moin"}'
+        }
+
+        $actual = Get-WIPURIParts -URI $uri -Scheme DATA
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should parse a valid data URI with no data' {
+        $uri = 'data:,'
+        $expected = @{
+          Scheme     = 'data'
+          MimeType   = 'text/plain'
+          Parameters = @{ charset = 'US-ASCII' }
+          Base64     = $false
+          Data       = ''
+        }
+
+        $actual = Get-WIPURIParts -URI $uri -Scheme DATA
+        Compare-URIParts -Expected $expected -Actual $actual
+      }
+
+      It 'should throw an error for an empty data URI' {
+        $uri = ''
+        { Get-WIPURIParts -URI $uri -Scheme DATA } | Should -Throw -Because "🔥 URI was: $uri"
       }
     }
 
-    Context 'Invalid base64 string' {
-      It 'should throw an error when an invalid base64 string is input' {
-        { ConvertFrom-WIPBase64 'invalid_base64_string' -Encoding UTF-8 } | Should -Throw
+    Context 'Test lists of DATA URIs' {
+      It 'should correctly parse all kinds of valid data URIs' {
+        $validUris = @(
+          @{ Uri     = 'data:text/plain;charset=US-ASCII,hello%20world'
+            Expected = @{ MimeType = 'text/plain'; Parameters = @{ charset = 'US-ASCII' }; Data = 'hello%20world' }
+          },
+          @{ Uri = 'data:,hello world'; Expected = @{ Data = 'hello world' } },
+          @{
+            Uri      = 'data:text/html,<html><body>Hello World</body></html>'
+            Expected = @{ MimeType = 'text/html'; Data = '<html><body>Hello World</body></html>' }
+          },
+          @{ Uri     = 'data:isolated=param;base64,YQ=='
+            Expected = @{
+              MimeType   = 'text/plain'
+              Parameters = @{ isolated = 'param'; charset = 'US-ASCII' }
+              Base64     = $true
+              Data       = 'YQ=='
+            }
+          },
+          @{ Uri     = 'data:charset=UTF-8,e'
+            Expected = @{ MimeType = 'text/plain'; Parameters = @{ charset = 'UTF-8' }; Data = 'e' }
+          },
+          @{ Uri     = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=='
+            Expected = @{ MimeType = 'image/png'; Base64 = $true; Data = 'iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==' }
+          }
+        )
+
+        foreach ($test in $validUris) {
+          $actual = Get-WIPURIParts -URI $test.Uri -Scheme DATA
+          Compare-URIParts -Expected $test.Expected -Actual $actual -ContextMessage $test.Uri
+        }
       }
-    }
 
-    Context 'Empty string input' {
-      It 'should throw an error when an empty string is sent to ConvertTo-Base64' {
-        { ConvertTo-WIPBase64 '' -Encoding UTF-8 } | Should -Throw
-      }
-    }
+      It 'should throw an error for an invalid data URI' {
+        $invalidUris = @(
+          'data:',
+          'data:;;,',
+          'data:wrongmimetype,somedata',
+          'data:my/type;wrong-param,somedata',
+          'data:my/type;charset;someflag;toolong,somedata',
+          'data:invalid'
+        )
 
-    Context 'File conversion test' {
-      It 'should have identical content for the original and processed txt files' {
-        $originalFileContent = "Test file content äöü Unicode ⚠️`nLinebreak`n"
-        $originalFile = New-TemporaryFile
-        Set-Content -Path $originalFile.FullName -Value $originalFileContent -NoNewline
-
-        # Create a zip file from the txt file
-        $zipFile = New-TemporaryFile
-        Compress-Archive -Path $originalFile.FullName -DestinationPath $zipFile.FullName -Force
-
-        # Convert the raw zip file content to base64
-        # ❗ `Get-Content -AsByteStream` actually outputs a ByteArray, not a Stream ❗
-        $base64String = Get-Content -Path $zipFile.FullName -Raw -AsByteStream | ConvertTo-WIPBase64
-
-        # Convert the Base64 string back to a zip file
-        $convertedBytes = ConvertFrom-WIPBase64 $base64String -AsByteArray
-        $convertedZipFile = New-TemporaryFile
-        Remove-Item $convertedZipFile.FullName -Force
-        [System.IO.File]::WriteAllBytes($convertedZipFile.FullName, $convertedBytes)
-
-        # Extract the zip file to a txt file
-        $convertedFile = New-TemporaryFile
-        Remove-Item $convertedFile.FullName -Force
-        Expand-Archive -Path $convertedZipFile.FullName -DestinationPath $convertedFile.FullName -Force
-
-        $extractedFilePath = Join-Path -Path $convertedFile.FullName -ChildPath $originalFile.Name
-        $convertedFileContent = Get-Content -Path $extractedFilePath -Raw
-
-        Remove-Item $originalFile.FullName -Force
-        Remove-Item $zipFile.FullName -Force
-        Remove-Item $convertedZipFile.FullName -Force
-        Remove-Item $convertedFile.FullName -Force -Recurse
-
-        $convertedFileContent | Should -Be $originalFileContent
+        foreach ($uri in $invalidUris) {
+          { Get-WIPURIParts -URI $uri -Scheme DATA } | Should -Throw -Because "🔥 URI was: $uri"
+        }
       }
     }
   }
 }
+
+
