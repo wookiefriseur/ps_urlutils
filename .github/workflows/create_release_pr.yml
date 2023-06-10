@@ -121,7 +121,6 @@ jobs:
           git add .
           git commit -m "update to ${{ steps.update_version.outputs.VERSION }}"
           git push
-          Write-Output "SHA=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -138,13 +137,11 @@ jobs:
     outputs:
       version: ${{ steps.update_version.outputs.VERSION }}
       branch: ${{ steps.release_branch.outputs.BRANCH_NAME }}
-      sha: ${{ steps.update_files.outputs.SHA }}
 
   # Run test workflow against the new release PR
   trigger_tests:
     needs: [update_and_pr]
     uses: ./.github/workflows/run_tests.yml
     with:
-      sha: ${{ needs.update_and_pr.outputs.sha }}
       branch: ${{ needs.update_and_pr.outputs.branch }}
       version: ${{ needs.update_and_pr.outputs.version }}

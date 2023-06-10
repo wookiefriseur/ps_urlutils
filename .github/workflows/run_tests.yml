@@ -17,9 +17,6 @@ on:
       branch:
         required: true
         type: string
-      sha:
-        required: true
-        type: string
       version:
         required: true
         type: string
@@ -35,19 +32,19 @@ jobs:
 
     steps:
       - name: Get PR sha
-        id: get_sha
+        id: get_ref
         run: |
           if('${{ github.event_name }}' -eq 'workflow_call') {
-            $PR_SHA = '${{ github.event.inputs.sha }}'
+            $REFERENCE = '${{ github.event.inputs.branch }}'
           } else {
-            $PR_SHA = '${{ github.event.pull_request.head.sha }}'
+            $REFERENCE = '${{ github.event.pull_request.head.ref }}'
           }
-          Write-Output "PR_SHA=$PR_SHA" >> $env:GITHUB_OUTPUT
+          Write-Output "REFERENCE=$REFERENCE" >> $env:GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          ref: ${{ steps.get_sha.outputs.PR_SHA }}
+          ref: ${{ steps.get_ref.outputs.REFERENCE }}
       - run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@users.noreply.github.com"
@@ -66,6 +63,5 @@ jobs:
     needs: [run_tests]
     uses: ./.github/workflows/merge_and_release.yml
     with:
-      sha: ${{ github.event.inputs.sha }}
       branch: ${{ github.event.inputs.branch }}
       version: ${{ github.event.inputs.version }}
