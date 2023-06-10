@@ -70,7 +70,8 @@ function ConvertTo-EscapedURL {
 
 .DESCRIPTION
     Extracts parts from a URI and makes them acessible from a table.
-    Supports http(s) and data URIs.
+    Supports http(s) URIs like "http://" and "https://"
+    Supports data URIs like "data:text/plain;charset=US-ASCII;base64,bW9pbg==".
 
 .EXAMPLE
     Get-URIParts 'https://www.example.com/?q=moin'
