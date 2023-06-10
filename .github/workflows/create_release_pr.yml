@@ -129,9 +129,9 @@ jobs:
         run: |
           gh pr create `
            --title "Release ${{ steps.update_version.outputs.VERSION }}" `
-           --fill `
            --base main `
-           --label `actions:RELEASE`
+           --fill `
+           --label "actions:RELEASE"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
