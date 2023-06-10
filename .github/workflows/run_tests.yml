@@ -53,6 +53,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
 
       - name: Run Tests
+        shell: pwsh
         id: testresults
         run: |
           Set-PSRepository psgallery -InstallationPolicy trusted
