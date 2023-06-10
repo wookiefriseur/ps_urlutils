@@ -92,20 +92,17 @@ function Get-URIParts {
   )
 
   begin {
-    $schemeHttp = "^(?i)https?://"
+    $schemeHttp = '^(?i)https?://'
 
     # rfc2397: data:[<mediatype>][";base64"],data
     # mediatype := [ type "/" subtype ] *( ";" parameter )
     # parameter  := attribute "=" value
-    $schemeDataRFC2397 = @"
-^(?i)data:
-(?:(?<type>[a-z]+/[a-z0-9\-]+)?
-(?<params>(?:;[a-z0-9\-]+=[a-z0-9\-]+)*)?
-(?<base64>;base64)?),
-"@ -split "`n" -join ""
+    $schemeDataRFC2397 = '^(?i)data:(?:(?<type>[a-z]+/[a-z0-9\-]+)?(?<params>(?:;[a-z0-9\-]+=[a-z0-9\-]+)*)?(?<base64>;base64)?),'
 
-    $schemePort443 = ":443(?![a-zA-Z@])(/.+)*"
-    $schemeRFC3986 = "[a-z][a-z\.\-\+]*"
+    $schemePort443 = ':443(?![a-zA-Z@])(/.+)*'
+
+    #  scheme      = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+    $schemeUriRFC3986 = '[a-z][a-z\.\-\+]*'
   }
 
   process {
@@ -129,7 +126,7 @@ function Get-URIParts {
         $uriObject = New-Object System.Uri($URI, [System.UriKind]::Absolute)
 
         # Catch malformed schemes
-        if (-not($uriObject.Scheme -match $schemeRFC3986)) {
+        if (-not($uriObject.Scheme -match $schemeUriRFC3986)) {
           throw "Invalid scheme: $($uriObject.Scheme)"
         }
 
