@@ -43,6 +43,7 @@ jobs:
         run: |
           if('${{ github.event_name }}' -ne 'workflow_dispatch') {
             $labels = "${{ join(github.event.pull_request.labels.*.name,  ', ') }}"
+            $pr_number = "${{ github.event.pull_request.number }}"
           } else {
             $latestPRs = gh pr list --base main --state merged --json number,labels,mergedAt --limit 10 | ConvertFrom-JSON
 
@@ -51,9 +52,10 @@ jobs:
               $VERSION_LABELS.Contains($_.labels.name)
             } | Sort-Object -Property mergedAt -Descending | Select-Object -First 1
             $labels = $latestReleasePR.labels.name -join ', '
+            $pr_number = $latestReleasePR.number
           }
           Write-Output "LABELS=$labels" >> $env:GITHUB_OUTPUT
-          Write-Output "PR_NUMBER=$($latestReleasePR.number)" >> $env:GITHUB_OUTPUT
+          Write-Output "PR_NUMBER=$pr_number" >> $env:GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
