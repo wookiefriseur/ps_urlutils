@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch or commit hash (4-40 chars) to test
+        description: Branch (release/pr-123) or commit hash (40 chars) to test
         required: true
         type: string
   # Test PRs and commits to PRs from users
