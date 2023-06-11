@@ -51,7 +51,7 @@ jobs:
       # The main repo will update the reference, if the latest release changed
       - name: Trigger update in main repo
         run: |
-          gh workflow run proxy_update_submodule_refs.yml `
+          gh workflow run proxy_update_submodule_refs.yml \
           --repo wookiefriseur/valor-modulis
         env:
           GITHUB_TOKEN: ${{ secrets.VM_ACTIONS }}
