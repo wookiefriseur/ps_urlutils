@@ -3,7 +3,8 @@ name: CreateReleasePR
 # Connected workflows are:
 # 1. RunTests - run_tests.yml
 # 2. 📍CreateReleasePR - create_release_pr.yml
-# 3. MergeAndRelease - merge_and_release.yml
+# 3. Release - release.yml
+# 4. ProxyUpdateSubmoduleRefs - valor-moduls/proxy_update_submodule_refs.yml
 
 # fixes version labels
 # updates the version in the module manifest
@@ -129,19 +130,6 @@ jobs:
           gh pr create `
            --title "Release ${{ steps.update_version.outputs.VERSION }}" `
            --base main `
-           --fill `
-           --label "actions:RELEASE"
+           --fill
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    outputs:
-      version: ${{ steps.update_version.outputs.VERSION }}
-      branch: ${{ steps.release_branch.outputs.BRANCH_NAME }}
-
-  # Run test workflow against the new release PR
-  trigger_tests:
-    needs: [update_and_pr]
-    uses: ./.github/workflows/run_tests.yml
-    with:
-      branch: ${{ needs.update_and_pr.outputs.branch }}
-      version: ${{ needs.update_and_pr.outputs.version }}

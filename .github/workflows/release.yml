@@ -1,0 +1,57 @@
+name: Release
+
+# Connected workflows are:
+# 1. RunTests - run_tests.yml
+# 2. CreateReleasePR - create_release_pr.yml
+# 3. 📍Release - release.yml
+# 4. ProxyUpdateSubmoduleRefs - valor-moduls/proxy_update_submodule_refs.yml
+
+# Creates a release from main
+
+permissions:
+  contents: write
+  pull-requests: write
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  merge_and_release:
+    # Run when triggered manually
+    # Run when merged from "release/"
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'release/'))
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Get Version
+        id: get_version
+        run: |
+          VERSION=$(grep --only-matching --perl-regexp "ModuleVersion\s*=\s*'\K[0-9\.]+" *.psd1)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        run: |
+          gh release create "${{ steps.get_version.outputs.VERSION }}" `
+           --target main `
+           --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tell the main repo that there is a new version in town
+      # The main repo will update the reference, if the latest release changed
+      - name: Trigger update in main repo
+        run: |
+          gh workflow run proxy_update_submodule_refs.yml `
+          --repo wookiefriseur/valor-modulis
+        env:
+          GITHUB_TOKEN: ${{ secrets.VM_ACTIONS }}
