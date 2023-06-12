@@ -55,3 +55,32 @@ jobs:
           --repo wookiefriseur/valor-modulis
         env:
           GITHUB_TOKEN: ${{ secrets.VM_ACTIONS }}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [merge_and_release]
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Trying to delete all leftover release branches (eg. release/pr-123)
+      - name: Delete Leftover Branches
+        run: |
+          BRANCHES=$(git branch -r | grep 'release/pr-' | sed 's/origin\///')
+          for branch in $BRANCHES
+          do
+            if [ -n "$branch" ]; then
+              git branch -d $branch ||true
+              git push origin --delete $branch || true
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
