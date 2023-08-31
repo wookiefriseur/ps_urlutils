@@ -4,7 +4,7 @@ name: RunTests
 # 1. 📍RunTests - run_tests.yml
 # 2. CreateReleasePR - create_release_pr.yml
 # 3. Release - release.yml
-# 4. ProxyUpdateSubmoduleRefs - valor-moduls/proxy_update_submodule_refs.yml
+# 4. ProxyUpdateSubmoduleRefs - valor-modulis/proxy_update_submodule_refs.yml
 
 # checks code of a PR as a precondition for merges
 
